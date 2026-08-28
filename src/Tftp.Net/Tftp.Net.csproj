@@ -6,6 +6,7 @@
 	<PackageId>RJohnsonPGH.Tftp.Net</PackageId>
 	<PackageLicenseExpression>MS-PL</PackageLicenseExpression>
 	<PackageProjectUrl>https://github.com/RJohnsonPGH/tftp.net</PackageProjectUrl>
+	<PackageReadmeFile>README.md</PackageReadmeFile>
 	<PackageTags>TFTP library</PackageTags>
 	<VersionSuffix></VersionSuffix>
 	<Authors>RJohnsonPGH</Authors>
@@ -14,7 +15,10 @@
 	<ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
-	  <InternalsVisibleTo Include="Tftp.Net.Tests" />
+	<None Include="../../README.md"
+	  Pack="true"
+	  PackagePath="\" />
+	<InternalsVisibleTo Include="Tftp.Net.Tests" />
 	<PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.11" />
 	<PackageReference Include="Polly" Version="8.7.0" />
   </ItemGroup>
