@@ -1,0 +1,41 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: dotnet/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Run tests
+        run: dotnet test --report-trx
+
+      - name: Publish CLI
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          for rid in linux-x64 linux-arm64 win-x64 osx-x64 osx-arm64; do
+            dotnet publish src/Tftp.Net.Cli -c Release -r "$rid" -o "artifacts/$rid"
+            zip -r "Tftp.Net.Cli_${version}_${rid}.zip" "artifacts/$rid"
+          done
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          generate_release_notes: true
+          files: Tftp.Net.Cli_*.zip

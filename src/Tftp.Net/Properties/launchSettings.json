@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "Tftp.Net": {
+      "commandName": "Project",
+      "commandLineArgs": "server --max-block-size 65535"
+    }
+  }
+}

@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="src/Tftp.Net.Cli/Tftp.Net.Cli.csproj" />
+  <Project Path="src/Tftp.Net/Tftp.Net.csproj" />
+  <Project Path="test/Tftp.Net.Tests/Tftp.Net.Tests.csproj" />
+</Solution>
