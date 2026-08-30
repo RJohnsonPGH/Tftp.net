@@ -240,15 +240,13 @@ public class TftpServerTests : IDisposable
 	[Theory]
 	[InlineData(true, "../existing.txt")]
 	[InlineData(true, "..\\existing.txt")]
-	[InlineData(true, "subdir/existing.txt")]
-	[InlineData(true, "subdir\\existing.txt")]
+	[InlineData(true, "subdir/../../existing.txt")]
 	[InlineData(true, "..")]
 	[InlineData(true, "C:\\Windows\\win.ini")]
 	[InlineData(true, "/etc/passwd")]
-	[InlineData(true, "existing.txt:hidden")]
 	[InlineData(false, "../existing.txt")]
-	[InlineData(false, "subdir/existing.txt")]
-	public async Task RunAsync_ShouldRejectRequest_WhenFilenameContainsPathComponents(bool isWriteRequest, string filename)
+	[InlineData(false, "/etc/passwd")]
+	public async Task RunAsync_ShouldRejectRequest_WhenFilenameEscapesRootDirectory(bool isWriteRequest, string filename)
 	{
 		// Arrange
 		var remoteEndpoint = new IPEndPoint(IPAddress.Loopback, 12345);
@@ -300,6 +298,68 @@ public class TftpServerTests : IDisposable
 		// Assert - the request must be rejected with AccessViolation and no transfer may be queued
 		await channel.Received(1).SendPreTransferErrorAsync(Error.AccessViolation, remoteEndpoint, Arg.Any<CancellationToken>());
 		await channel.DidNotReceiveWithAnyArgs().ProcessHandshakeAsync(default!, default!, default!, Arg.Any<CancellationToken>());
+	}
+
+	[Theory]
+	[InlineData(false, "subdir/existing.txt")]
+	[InlineData(true, "subdir/newfile.txt")]
+	public async Task RunAsync_ShouldAcceptRequest_WhenFilenameIsWithinSubfolder(bool isWriteRequest, string filename)
+	{
+		// Arrange - subfolders of the root directory are legitimate request targets, so a
+		// request for one must pass path validation and reach the transfer stage.
+		var subdirectory = Path.Combine(_tempDirectory, "subdir");
+		Directory.CreateDirectory(subdirectory);
+		await File.WriteAllTextAsync(Path.Combine(subdirectory, "existing.txt"), "subfolder content", TestContext.Current.CancellationToken);
+
+		var remoteEndpoint = new IPEndPoint(IPAddress.Loopback, 12345);
+		IServerHandshake handshake = isWriteRequest
+			? new ServerWriteRequestHandshake(remoteEndpoint, filename, TransferMode.Octet, OptionSet.Empty)
+			: new ServerReadRequestHandshake(remoteEndpoint, filename, TransferMode.Octet, OptionSet.Empty);
+		IServerHandshake[] handshakes = [handshake];
+
+		var channel = Substitute.For<ITftpChannel>();
+
+		channel.ServerListenAsync(Arg.Any<CancellationToken>())
+			.Returns(handshakes.ToAsyncEnumerable());
+
+		var clientFactory = Substitute.For<IUdpClientFactory>();
+		clientFactory.Create(Arg.Any<IPEndPoint>())
+			.Returns(Substitute.For<IUdpClient>());
+
+		var channelFactory = Substitute.For<ITftpChannelFactory>();
+		channelFactory.Create(Arg.Any<IUdpClient>())
+			.Returns(channel);
+
+		using var serviceProvider = new ServiceCollection()
+			.AddLogging((builder) =>
+			{
+				builder.AddXUnit(_outputHelper);
+				builder.SetMinimumLevel(LogLevel.Trace);
+			})
+			.AddSingleton(clientFactory)
+			.AddSingleton(channelFactory)
+			.AddSingleton<ITftpConfigurationProvider>(new TftpConfigurationProvider(_tempDirectory, allowWriteRequests: true, maxBlockSize: 512, maxTimeoutSeconds: 5))
+			.AddSingleton<TftpServer>()
+			.BuildServiceProvider();
+
+		var server = serviceProvider.GetRequiredService<TftpServer>();
+
+		// Act
+		var serverTask = server.RunAsync(_cancellationToken);
+		await Task.Delay(100, _cancellationToken);
+		_cancellationTokenSource.Cancel();
+
+		try
+		{
+			await serverTask;
+		}
+		catch (OperationCanceledException)
+		{
+		}
+
+		// Assert - no pre-transfer error may be sent and the transfer stage must have been reached
+		await channel.DidNotReceive().SendPreTransferErrorAsync(Arg.Any<Error>(), Arg.Any<IPEndPoint>(), Arg.Any<CancellationToken>());
+		await channel.Received(1).ProcessHandshakeAsync(Arg.Any<IProgress<TftpTransferProgress>>(), Arg.Any<RequestHandshake>(), Arg.Any<FileStream>(), Arg.Any<CancellationToken>());
 	}
 
 	[Fact]

@@ -96,8 +96,7 @@ public sealed partial class TftpServer(ILogger<TftpServer> logger, ITftpConfigur
 					continue;
 				}
 
-				// Only plain filenames within the root directory are permitted. Anything path-like
-				// (directory separators, drive letters, traversal) could escape the serving root.
+				// Verify the requested file name lives within our configured root directory. If not, reject the request with an access violation error.
 				if (!TryResolveRequestedFilePath(serverOptions.RootDirectory, serverHandshake.Filename, out var requestedFilePath))
 				{
 					LogUnsafeFilenameRejected(serverHandshake.Filename);
@@ -303,38 +302,25 @@ public sealed partial class TftpServer(ILogger<TftpServer> logger, ITftpConfigur
 	/// <summary>
 	/// Resolves a requested filename to a path inside the server's root directory.
 	/// </summary>
-	/// <remarks>Only plain filenames are accepted. Filenames which are rooted or contain directory
-	/// separators, drive letters or NTFS stream delimiters are rejected outright, since they could
-	/// escape the serving root. As defense in depth, the combined path is additionally resolved and
-	/// verified to remain below the root before it is returned.</remarks>
 	/// <param name="rootDirectory">The directory the server is configured to serve.</param>
 	/// <param name="filename">The filename as requested by the remote endpoint.</param>
 	/// <param name="filePath">When this method returns <see langword="true"/>, contains the resolved absolute file path;
 	/// otherwise, <see langword="null"/>.</param>
-	/// <returns><see langword="true"/> if the filename is a plain name which resolves inside the root directory;
+	/// <returns><see langword="true"/> if the filename resolves inside the root directory;
 	/// otherwise, <see langword="false"/>.</returns>
-	private static bool TryResolveRequestedFilePath(string rootDirectory, string filename, [NotNullWhen(true)] out string? filePath)
+	internal static bool TryResolveRequestedFilePath(string rootDirectory, string filename, [NotNullWhen(true)] out string? filePath)
 	{
 		filePath = null;
 
-		if (string.IsNullOrWhiteSpace(filename) ||
-			Path.IsPathRooted(filename) ||
-			filename.Contains('\\') ||
-			filename.Contains('/') ||
-			filename.Contains(':'))
+		string basePath = Path.GetFullPath(rootDirectory);
+		string fullPath = Path.GetFullPath(filename, rootDirectory);
+
+		if (!fullPath.StartsWith(basePath + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
 		{
 			return false;
 		}
-
-		var fullRootDirectory = Path.TrimEndingDirectorySeparator(Path.GetFullPath(rootDirectory));
-		var candidatePath = Path.GetFullPath(Path.Combine(fullRootDirectory, filename));
-
-		if (!candidatePath.StartsWith(fullRootDirectory + Path.DirectorySeparatorChar, StringComparison.Ordinal))
-		{
-			return false;
-		}
-
-		filePath = candidatePath;
+		
+		filePath = fullPath;
 		return true;
 	}
 }
