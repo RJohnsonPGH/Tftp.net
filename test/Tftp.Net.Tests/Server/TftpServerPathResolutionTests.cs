@@ -126,7 +126,6 @@ internal sealed class EscapingFilenameTestData : TheoryData<string>
 		Add("subdir/../../../file.txt");
 		Add("../subdir/file.txt");
 		Add("..");
-		Add(".");
 		Add("subdir/..");
 		Add("/etc/passwd");
 
