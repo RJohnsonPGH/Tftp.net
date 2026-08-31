@@ -66,7 +66,7 @@ The client proposes the negotiated options (`timeout`, `blksize`, `tsize`, `wins
 
 Server-side hardening:
 
-- Only plain filenames are accepted. Rooted paths, directory separators, drive letters, and traversal sequences are rejected, and the resolved path is verified to remain inside the configured root directory.
+- Comprehensive checks to prevent unintended path traversal. Requested files can only be served from the configured directory and subfolders.
 - Write requests are refused unless enabled by configuration, and existing files are never overwritten (create-new semantics).
 - Duplicate RRQ/WRQ retransmissions from an endpoint that already has a handshake queued or a transfer in flight are dropped silently instead of spawning a second transfer.
 - Unparseable packets and non-request packets on the listen port are ignored, since responding to noise on UDP could generate unnecessary traffic.
