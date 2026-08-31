@@ -486,9 +486,11 @@ internal class TftpServerTestData : TheoryData<ServerHandshake, bool, Error?>
 }
 
 /// <summary>
-/// Handshake filenames which resolve outside the server's root directory. Backslash is a
-/// directory separator and "C:\" a rooted path only on Windows; on Linux the same names
-/// resolve to plain filenames within the root and are accepted instead.
+/// Handshake filenames which must be rejected with an access violation. This covers filenames
+/// which resolve outside the server's root directory, the root directory itself, and malformed
+/// input which must be rejected without faulting the server. Backslash is a directory separator
+/// and "C:\" a rooted path only on Windows; on Linux the same names resolve to plain filenames
+/// within the root and are accepted instead.
 /// </summary>
 internal class EscapingFilenameHandshakeTestData : TheoryData<bool, string>
 {
@@ -497,9 +499,15 @@ internal class EscapingFilenameHandshakeTestData : TheoryData<bool, string>
 		Add(true, "../existing.txt");
 		Add(true, "subdir/../../existing.txt");
 		Add(true, "..");
+		Add(true, ".");
 		Add(true, "/etc/passwd");
 		Add(false, "../existing.txt");
+		Add(false, ".");
 		Add(false, "/etc/passwd");
+
+		// An overlong filename makes path normalization throw; the server must reject the
+		// request with an access violation instead of faulting.
+		Add(true, new string('a', 40_000));
 
 		if (OperatingSystem.IsWindows())
 		{

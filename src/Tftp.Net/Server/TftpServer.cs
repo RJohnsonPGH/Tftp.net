@@ -1,8 +1,6 @@
 ﻿using Microsoft.Extensions.Logging;
 using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
-using System.IO;
-using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading.Channels;
@@ -10,7 +8,6 @@ using Tftp.Net.Channel;
 using Tftp.Net.Channel.Client;
 using Tftp.Net.Commands;
 using Tftp.Net.Commands.Properties;
-using Tftp.Net.Commands.Validation;
 using Tftp.Net.Configuration;
 using Tftp.Net.Transfer;
 
@@ -100,7 +97,6 @@ public sealed partial class TftpServer(ILogger<TftpServer> logger, ITftpConfigur
 				// Verify the requested file name lives within our configured root directory. If not, reject the request with an access violation error.
 				if (!TryResolveRequestedFilePath(serverOptions.RootDirectory, serverHandshake.Filename, out var requestedFilePath))
 				{
-					LogUnsafeFilenameRejected(serverHandshake.Filename);
 					await serverChannel.SendPreTransferErrorAsync(Error.AccessViolation, serverHandshake.RemoteEndpoint, cancellationToken);
 					continue;
 				}
@@ -220,7 +216,6 @@ public sealed partial class TftpServer(ILogger<TftpServer> logger, ITftpConfigur
 
 		if (!TryResolveRequestedFilePath(serverOptions.RootDirectory, handshake.Filename, out var filePath))
 		{
-			LogUnsafeFilenameRejected(handshake.Filename);
 			await serverChannel.SendPreTransferErrorAsync(Error.AccessViolation, handshake.RemoteEndpoint, cancellationToken);
 			return;
 		}
@@ -303,33 +298,60 @@ public sealed partial class TftpServer(ILogger<TftpServer> logger, ITftpConfigur
 	/// <summary>
 	/// Resolves a requested filename to a path inside the server's root directory.
 	/// </summary>
-	/// <param name="rootDirectory">The directory the server is configured to serve.</param>
-	/// <param name="filename">The filename as requested by the remote endpoint.</param>
+	/// <remarks>
+	/// The filename is resolved against the root directory and verified to remain inside it. The request is
+	/// rejected when the resolved path is the root directory itself, escapes it through traversal sequences
+	/// (such as ".."), lives on a different volume or root, or the filename contains characters which are
+	/// invalid on the current platform. Path normalization follows the platform's native rules, so case
+	/// sensitivity matches the underlying file system. Malformed input (such as overlong paths) is rejected
+	/// and logged rather than thrown, since the filename is untrusted client input.
+	/// </remarks>
+	/// <param name="baseDirectory">The directory the server is configured to serve.</param>
+	/// <param name="requestedFilename">The filename as requested by the remote endpoint.</param>
 	/// <param name="filePath">When this method returns <see langword="true"/>, contains the resolved absolute file path;
 	/// otherwise, <see langword="null"/>.</param>
-	/// <returns><see langword="true"/> if the filename resolves inside the root directory;
+	/// <returns><see langword="true"/> if the filename resolves to a file inside the root directory;
 	/// otherwise, <see langword="false"/>.</returns>
-	internal static bool TryResolveRequestedFilePath(string rootDirectory, string filename, [NotNullWhen(true)] out string? filePath)
+	internal bool TryResolveRequestedFilePath(string baseDirectory, string requestedFilename, [NotNullWhen(true)] out string? filePath)
 	{
 		filePath = null;
 
-		string root = Path.GetFullPath(rootDirectory);
-		string fullPath = Path.GetFullPath(filename, root);
-
-		string relativePath = Path.GetRelativePath(root, fullPath);
-
-		if (Path.IsPathFullyQualified(relativePath))
+		string fullBasePath;
+		string fullRequestedPath;
+		try
 		{
+			fullBasePath = Path.GetFullPath(baseDirectory);
+			fullRequestedPath = Path.GetFullPath(requestedFilename, fullBasePath);
+		}
+		catch (Exception ex) when (ex is IOException or ArgumentException)
+		{
+			// Normalization of untrusted input can fail (e.g. overlong paths). Reject and log instead of
+			// propagating: this method sits on the request path and its callers do not catch exceptions.
+			LogFailedToResolveRequestedPath(requestedFilename, baseDirectory, ex);
 			return false;
 		}
 
-		if (relativePath == ".." ||
-			relativePath.StartsWith(".." + Path.DirectorySeparatorChar))
+		string relativePath = Path.GetRelativePath(
+			fullBasePath,
+			fullRequestedPath);
+
+		bool escapesBaseDirectory =
+			Path.IsPathRooted(relativePath) ||
+			relativePath.Equals("..", StringComparison.Ordinal) ||
+			relativePath.StartsWith(
+				$"..{Path.DirectorySeparatorChar}",
+				StringComparison.Ordinal) ||
+			relativePath.StartsWith(
+				$"..{Path.AltDirectorySeparatorChar}",
+				StringComparison.Ordinal);
+
+		if (escapesBaseDirectory)
 		{
+			LogUnsafeFilenameRejected(requestedFilename);
 			return false;
 		}
 
-		filePath = fullPath;
+		filePath = fullRequestedPath;
 		return true;
 	}
 }
