@@ -87,9 +87,15 @@ public sealed partial class TftpServer
 
 	[LoggerMessage(
 		EventId = 5013,
-		Level = LogLevel.Warning,
-		Message = "Requested filename '{Filename}' contains path components. Rejecting handshake.")]
+		Level = LogLevel.Error,
+		Message = "Requested filename '{Filename}' is invalid or resolves outside the root directory. Rejecting handshake.")]
 	public partial void LogUnsafeFilenameRejected(string filename);
+
+	[LoggerMessage(
+		EventId = 5016,
+		Level = LogLevel.Error,
+		Message = "Failed to resolve requested filename '{Filename}' against root directory '{RootDirectory}'. The malformed input was rejected; this may indicate a denial-of-service attempt or a coding error.")]
+	public partial void LogFailedToResolveRequestedPath(string filename, string rootDirectory, Exception ex);
 
 	[LoggerMessage(
 		EventId = 5014,
