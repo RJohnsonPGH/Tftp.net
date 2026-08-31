@@ -146,7 +146,11 @@ internal sealed class MalformedPathTestData : TheoryData<string, string>
 {
 	public MalformedPathTestData()
 	{
-		Add(new string('a', 40_000), "file.txt");
-		Add("C:\\tftp-root", new string('a', 40_000));
+		// These do not appear to throw in linux, but they do on Windows. The test is still useful to ensure that the method rejects them instead of throwing.
+		if (OperatingSystem.IsWindows())
+		{
+			Add(new string('a', 40_000), "file.txt");
+			Add("C:\\tftp-root", new string('a', 40_000));
+		}
 	}
 }
