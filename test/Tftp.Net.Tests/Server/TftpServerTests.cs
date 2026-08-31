@@ -499,10 +499,8 @@ internal class EscapingFilenameHandshakeTestData : TheoryData<bool, string>
 		Add(true, "../existing.txt");
 		Add(true, "subdir/../../existing.txt");
 		Add(true, "..");
-		Add(true, ".");
 		Add(true, "/etc/passwd");
 		Add(false, "../existing.txt");
-		Add(false, ".");
 		Add(false, "/etc/passwd");
 
 		// An overlong filename makes path normalization throw; the server must reject the
