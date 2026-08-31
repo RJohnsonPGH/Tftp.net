@@ -8,16 +8,40 @@ public class TftpServerPathResolutionTests
 
 	[Theory]
 	[ClassData(typeof(ResolvableFilenameTestData))]
-	public void TryResolveRequestedFilePath_ShouldResolvePath_WhenFilenameIsWithinRootDirectory(string filename)
+	public void TryResolveRequestedFilePath_ShouldResolvePath_WhenFilenameIsWithinRootDirectory(string filename, bool addSeparatorChar)
 	{
+		var rootDirectory = RootDirectory;
+		if (addSeparatorChar)
+		{
+			rootDirectory += Path.DirectorySeparatorChar;
+		}
+
 		// Act
-		var success = TftpServer.TryResolveRequestedFilePath(RootDirectory, filename, out var filePath);
+		var success = TftpServer.TryResolveRequestedFilePath(rootDirectory, filename, out var filePath);
 
 		// Assert
 		Assert.True(success);
 		Assert.NotNull(filePath);
-		Assert.Equal(Path.GetFullPath(filename, RootDirectory), filePath);
+		Assert.Equal(Path.GetFullPath(filename, rootDirectory), filePath);
 		Assert.True(Path.IsPathRooted(filePath!));
+	}
+
+	[Theory]
+	[ClassData(typeof(UnresolvableFilenameTestData))]
+	public void TryResolveRequestedFilePath_ShouldRejectPath_WhenFilenameIsInDifferentRootDrive(string filename, bool addSeparatorChar)
+	{
+		var rootDirectory = RootDirectory;
+		if (addSeparatorChar)
+		{
+			rootDirectory += Path.DirectorySeparatorChar;
+		}
+
+		// Act
+		var success = TftpServer.TryResolveRequestedFilePath(rootDirectory, filename, out var filePath);
+
+		// Assert
+		Assert.False(success);
+		Assert.Null(filePath);
 	}
 
 	[Theory]
@@ -55,21 +79,45 @@ public class TftpServerPathResolutionTests
 /// colon are ordinary filename characters, so names which traverse or root a path on Windows
 /// are plain filenames within the root there and are resolvable as well.
 /// </summary>
-internal sealed class ResolvableFilenameTestData : TheoryData<string>
+internal sealed class ResolvableFilenameTestData : TheoryData<string, bool>
 {
 	public ResolvableFilenameTestData()
 	{
-		Add("file.txt");
-		Add("subdir/file.txt");
-		Add("subdir\\file.txt");
-		Add("a/b/c/file.txt");
-		Add("subdir/../file.txt");
-		Add("./file.txt");
+		Add("file.txt", true);
+		Add("file.txt", false);
+		Add("subdir/file.txt", true);
+		Add("subdir/file.txt", false);
+		Add("subdir\\file.txt", true);
+		Add("subdir\\file.txt", false);
+		Add("a/b/c/file.txt", true);
+		Add("a/b/c/file.txt", false);
+		Add("subdir/../file.txt", true);
+		Add("subdir/../file.txt", false);
+		Add("./file.txt", true);
+		Add("./file.txt", false);
 
 		if (!OperatingSystem.IsWindows())
 		{
-			Add("..\\file.txt");
-			Add("C:\\Windows\\win.ini");
+			Add("..\\file.txt", true);
+			Add("..\\file.txt", false);
+			Add("C:\\Windows\\win.ini", true);
+			Add("C:\\Windows\\win.ini", false);
+
+		}
+	}
+}
+
+/// <summary>
+/// Filenames which resolve to a different root
+/// </summary>
+internal sealed class UnresolvableFilenameTestData : TheoryData<string, bool>
+{
+	public UnresolvableFilenameTestData()
+	{
+		if (OperatingSystem.IsWindows())
+		{
+			Add("D:\\file.txt", true);
+			Add("D:\\file.txt", false);
 		}
 	}
 }

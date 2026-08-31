@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.Logging;
 using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
+using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
@@ -312,14 +313,22 @@ public sealed partial class TftpServer(ILogger<TftpServer> logger, ITftpConfigur
 	{
 		filePath = null;
 
-		string basePath = Path.GetFullPath(rootDirectory);
-		string fullPath = Path.GetFullPath(filename, rootDirectory);
+		string root = Path.GetFullPath(rootDirectory);
+		string fullPath = Path.GetFullPath(filename, root);
 
-		if (!fullPath.StartsWith(basePath + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+		string relativePath = Path.GetRelativePath(root, fullPath);
+
+		if (Path.IsPathFullyQualified(relativePath))
 		{
 			return false;
 		}
-		
+
+		if (relativePath == ".." ||
+			relativePath.StartsWith(".." + Path.DirectorySeparatorChar))
+		{
+			return false;
+		}
+
 		filePath = fullPath;
 		return true;
 	}
