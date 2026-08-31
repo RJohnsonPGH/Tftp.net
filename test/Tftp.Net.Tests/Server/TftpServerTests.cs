@@ -238,14 +238,7 @@ public class TftpServerTests : IDisposable
 	}
 
 	[Theory]
-	[InlineData(true, "../existing.txt")]
-	[InlineData(true, "..\\existing.txt")]
-	[InlineData(true, "subdir/../../existing.txt")]
-	[InlineData(true, "..")]
-	[InlineData(true, "C:\\Windows\\win.ini")]
-	[InlineData(true, "/etc/passwd")]
-	[InlineData(false, "../existing.txt")]
-	[InlineData(false, "/etc/passwd")]
+	[ClassData(typeof(EscapingFilenameHandshakeTestData))]
 	public async Task RunAsync_ShouldRejectRequest_WhenFilenameEscapesRootDirectory(bool isWriteRequest, string filename)
 	{
 		// Arrange
@@ -489,5 +482,29 @@ internal class TftpServerTestData : TheoryData<ServerHandshake, bool, Error?>
 			true,
 			null
 		);
+	}
+}
+
+/// <summary>
+/// Handshake filenames which resolve outside the server's root directory. Backslash is a
+/// directory separator and "C:\" a rooted path only on Windows; on Linux the same names
+/// resolve to plain filenames within the root and are accepted instead.
+/// </summary>
+internal class EscapingFilenameHandshakeTestData : TheoryData<bool, string>
+{
+	public EscapingFilenameHandshakeTestData()
+	{
+		Add(true, "../existing.txt");
+		Add(true, "subdir/../../existing.txt");
+		Add(true, "..");
+		Add(true, "/etc/passwd");
+		Add(false, "../existing.txt");
+		Add(false, "/etc/passwd");
+
+		if (OperatingSystem.IsWindows())
+		{
+			Add(true, "..\\existing.txt");
+			Add(true, "C:\\Windows\\win.ini");
+		}
 	}
 }
