@@ -152,5 +152,10 @@ internal sealed class MalformedPathTestData : TheoryData<string, string>
 			Add(new string('a', 40_000), "file.txt");
 			Add("C:\\tftp-root", new string('a', 40_000));
 		}
+		else
+		{
+			Add(new string('\0', 1), "file.txt");
+			Add("/tftp-root", new string('\0', 1));
+		}
 	}
 }
